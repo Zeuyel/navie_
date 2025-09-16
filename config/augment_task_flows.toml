@@ -1,0 +1,115 @@
+# Augment注册任务流程配置
+# 基于tfa.md中的任务一和任务二
+
+[augment_registration_flow]
+name = "Augment注册流程"
+description = "完整的Augment账号注册和OAuth令牌获取流程"
+enabled = true
+
+# 任务一：Augment注册流程
+[[augment_registration_flow.tasks]]
+task_id = "augment_navigate_task"
+name = "导航到Augment注册页面"
+description = "访问app.augmentcode.com并点击Sign in -> Continue with GitHub"
+next_tasks = ["augment_github_authorize_task"]
+
+[[augment_registration_flow.tasks]]
+task_id = "augment_github_authorize_task"
+name = "GitHub OAuth授权"
+description = "在GitHub授权页面点击Authorize augmentcode"
+next_tasks = ["augment_payment_setup_task"]
+failure_next_tasks = []  # 如果被拒绝，记录到flagged.json并结束
+
+[[augment_registration_flow.tasks]]
+task_id = "augment_payment_setup_task"
+name = "设置支付方式"
+description = "点击Confirm payment method按钮，跳转到支付页面"
+next_tasks = ["augment_stripe_form_task"]
+
+[[augment_registration_flow.tasks]]
+task_id = "augment_stripe_form_task"
+name = "填写Stripe支付表单"
+description = "在Stripe iframe中填写卡号、过期日期、CVC"
+next_tasks = ["augment_billing_address_task"]
+
+[[augment_registration_flow.tasks]]
+task_id = "augment_billing_address_task"
+name = "填写账单地址"
+description = "点击手动输入地址，填写地址信息"
+next_tasks = ["augment_captcha_detect_task"]
+
+[[augment_registration_flow.tasks]]
+task_id = "augment_captcha_detect_task"
+name = "检测HCaptcha"
+description = "检查页面是否出现HCaptcha验证码"
+next_tasks = ["augment_hcaptcha_solve_task", "augment_form_submit_task"]  # 根据检测结果选择
+
+[[augment_registration_flow.tasks]]
+task_id = "augment_hcaptcha_solve_task"
+name = "解决HCaptcha"
+description = "使用YesCaptcha API解决HCaptcha验证码"
+next_tasks = ["augment_form_submit_task"]
+
+[[augment_registration_flow.tasks]]
+task_id = "augment_form_submit_task"
+name = "提交支付表单"
+description = "点击提交按钮完成支付，等待跳转回订阅页面"
+next_tasks = ["augment_token_generation_task"]
+
+# 任务二：OAuth令牌获取流程
+[[augment_registration_flow.tasks]]
+task_id = "augment_token_generation_task"
+name = "生成OAuth状态并获取授权码"
+description = "生成PKCE参数，构建授权URL，导航并授权"
+next_tasks = ["augment_code_extract_task"]
+
+[[augment_registration_flow.tasks]]
+task_id = "augment_code_extract_task"
+name = "提取授权码和状态"
+description = "从页面中提取授权码JSON数据"
+next_tasks = ["augment_access_token_task"]
+
+[[augment_registration_flow.tasks]]
+task_id = "augment_access_token_task"
+name = "获取访问令牌"
+description = "使用授权码和PKCE参数获取访问令牌"
+next_tasks = ["augment_token_save_task"]
+
+[[augment_registration_flow.tasks]]
+task_id = "augment_token_save_task"
+name = "保存令牌到文件"
+description = "将完整的账号信息和令牌保存到augment_token.json"
+next_tasks = []  # 流程结束
+
+# 错误处理配置
+[augment_registration_flow.error_handling]
+max_retries = 2
+retry_delay = 5  # 秒
+timeout = 30  # 秒
+
+# 特殊任务超时配置
+[augment_registration_flow.task_timeouts]
+augment_hcaptcha_solve_task = 300  # HCaptcha解决需要更长时间
+augment_form_submit_task = 60     # 支付处理需要更长时间
+
+# 环境变量要求
+[augment_registration_flow.required_env_vars]
+ROXY_API_KEY = "RoxyBrowser API密钥"
+AUGMENT_CLIENT_ID = "Augment客户端ID (默认: v)"
+CARD_NUMBER = "支付卡号"
+CARD_EXPIRY = "支付卡过期日期"
+CARD_CVC = "支付卡CVC"
+BILLING_ADDRESS_LINE1 = "账单地址行1"
+BILLING_ADDRESS_LINE2 = "账单地址行2"
+BILLING_POSTAL_CODE = "邮政编码"
+YESCAPTCHA_API_KEY = "YesCaptcha API密钥（验证码解决服务）"
+
+# 输出文件
+[augment_registration_flow.output_files]
+success_file = "augment_token.json"
+failure_file = "flagged.json"
+
+# 流程触发条件
+[augment_registration_flow.triggers]
+after_github_2fa_setup = true  # 在GitHub 2FA设置完成后触发
+manual_trigger = true           # 支持手动触发
