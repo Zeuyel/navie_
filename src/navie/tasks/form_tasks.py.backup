@@ -1,0 +1,492 @@
+"""
+琛ㄥ崟鐩稿叧浠诲姟
+"""
+
+import asyncio
+import logging
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException
+
+from navie.core.task_manager import TaskResult
+from navie.core.event_bus import create_event
+from navie.utils.email_manager import EmailManagerFactory
+# 已移除复杂的用户名生成器，直接使用邮箱前缀作为用户名
+try:
+    from config import (DEFAULT_PASSWORD, USERNAME_MIN_LENGTH,
+                       USERNAME_MAX_LENGTH, USERNAME_INCLUDE_NUMBERS, USERNAME_INCLUDE_HYPHENS,
+                       USERNAME_AVOID_CONSECUTIVE_NUMBERS, USERNAME_PREFERRED_STRATEGIES)
+except ImportError:
+    import sys, os
+    sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+    from config import (DEFAULT_PASSWORD, USERNAME_MIN_LENGTH,
+                       USERNAME_MAX_LENGTH, USERNAME_INCLUDE_NUMBERS, USERNAME_INCLUDE_HYPHENS,
+                       USERNAME_AVOID_CONSECUTIVE_NUMBERS, USERNAME_PREFERRED_STRATEGIES)
+
+logger = logging.getLogger(__name__)
+
+async def email_input_task(state_manager, event_bus):
+    """浠诲姟4: 瀹氫綅骞跺～鍐欓偖绠卞瓧娈?""
+    logger.info("鎵ц浠诲姟: email_input_task")
+
+    try:
+        browser = state_manager.get_data('browser_instance')
+        if not browser:
+            raise Exception("娴忚鍣ㄥ疄渚嬫湭鎵惧埌")
+
+        # 浠庣姸鎬佺鐞嗗櫒鑾峰彇宸查€夋嫨鐨勯偖绠卞湴鍧€
+        email_address = state_manager.get_data('selected_email')
+        if not email_address:
+            # 濡傛灉娌℃湁棰勯€夋嫨鐨勯偖绠憋紝鍒欎粠閰嶇疆鏂囦欢鍔犺浇
+            email_manager = EmailManagerFactory.load_from_config()
+            if not email_manager:
+                raise Exception("鏃犳硶鍔犺浇閭閰嶇疆锛岃妫€鏌?email_config.json")
+            email_address = email_manager.email
+
+        logger.info(f"浣跨敤閭鍦板潃: {email_address}")
+
+        # 鍙戝竷琛ㄥ崟濉啓寮€濮嬩簨浠?        await event_bus.publish(create_event(
+            name='form_filling_started',
+            data={},
+            source='email_input_task'
+        ))
+
+        # 绛夊緟閭杈撳叆妗嗗嚭鐜?        wait = WebDriverWait(browser.driver, 10)
+        email_input = wait.until(EC.presence_of_element_located((By.ID, "email")))
+
+        # 娓呯┖骞跺～鍐欓偖绠?        email_input.clear()
+        email_input.send_keys(email_address)
+
+        # 淇濆瓨閭鍒扮姸鎬?        state_manager.set_data('email', email_address)
+
+        logger.info(f"閭濉啓鎴愬姛: {email_address}")
+
+        return TaskResult(
+            success=True,
+            data={'email': email_address}
+        )
+        
+    except TimeoutException:
+        logger.error("閭杈撳叆妗嗘湭鎵惧埌")
+        return TaskResult(
+            success=False,
+            error="閭杈撳叆妗嗘湭鎵惧埌",
+            should_retry=True
+        )
+    except Exception as e:
+        logger.error(f"閭濉啓澶辫触: {e}")
+        return TaskResult(
+            success=False,
+            error=str(e),
+            should_retry=True
+        )
+
+async def password_input_task(state_manager, event_bus):
+    """浠诲姟5: 瀹氫綅骞跺～鍐欏瘑鐮佸瓧娈?""
+    logger.info("鎵ц浠诲姟: password_input_task")
+    
+    try:
+        browser = state_manager.get_data('browser_instance')
+        if not browser:
+            raise Exception("娴忚鍣ㄥ疄渚嬫湭鎵惧埌")
+        
+        # 绛夊緟瀵嗙爜杈撳叆妗嗗嚭鐜?        wait = WebDriverWait(browser.driver, 10)
+        password_input = wait.until(EC.presence_of_element_located((By.ID, "password")))
+        
+        # 鑾峰彇閭閰嶇疆涓殑瀵嗙爜
+        email_manager = EmailManagerFactory.load_from_config()
+        if email_manager and hasattr(email_manager, 'password') and email_manager.password:
+            password_to_use = email_manager.password
+            logger.info("浣跨敤閭閰嶇疆涓殑瀵嗙爜")
+
+            # 妫€鏌ュ瘑鐮佹槸鍚︿负绾瓧姣嶏紝濡傛灉鏄垯娣诲姞"0"
+            if password_to_use.isalpha():
+                password_to_use = password_to_use + "0"
+                logger.info("瀵嗙爜涓虹函瀛楁瘝锛屽凡娣诲姞'0'鍚庣紑")
+        else:
+            password_to_use = DEFAULT_PASSWORD
+            logger.info("浣跨敤榛樿瀵嗙爜")
+
+        # 娓呯┖骞跺～鍐欏瘑鐮?        password_input.clear()
+        password_input.send_keys(password_to_use)
+
+        logger.info("瀵嗙爜濉啓鎴愬姛")
+        
+        return TaskResult(
+            success=True,
+            data={'password_filled': True}
+        )
+        
+    except TimeoutException:
+        logger.error("瀵嗙爜杈撳叆妗嗘湭鎵惧埌")
+        return TaskResult(
+            success=False,
+            error="瀵嗙爜杈撳叆妗嗘湭鎵惧埌",
+            should_retry=True
+        )
+    except Exception as e:
+        logger.error(f"瀵嗙爜濉啓澶辫触: {e}")
+        return TaskResult(
+            success=False,
+            error=str(e),
+            should_retry=True
+        )
+
+async def username_generate_task(state_manager, event_bus):
+    """浠诲姟6: 鐢熸垚鐢ㄦ埛鍚?- 浣跨敤閭鍓嶇紑浣滀负鐢ㄦ埛鍚?""
+    logger.info("鎵ц浠诲姟: username_generate_task")
+
+    try:
+        # 鑾峰彇閭鍦板潃
+        email_address = state_manager.get_data('email')
+        if not email_address:
+            # 濡傛灉鐘舵€佷腑娌℃湁閭锛屽皾璇曚粠閰嶇疆鍔犺浇
+            email_manager = EmailManagerFactory.load_from_config()
+            if email_manager:
+                email_address = email_manager.email
+            else:
+                raise Exception("鏃犳硶鑾峰彇閭鍦板潃")
+
+        # 浣跨敤閭鍓嶇紑浣滀负鐢ㄦ埛鍚?        email_prefix = email_address.split('@')[0]
+        logger.info(f"浣跨敤閭鍓嶇紑浣滀负鐢ㄦ埛鍚? {email_prefix}")
+
+        # 纭繚绗﹀悎GitHub鐢ㄦ埛鍚嶈姹?        username = email_prefix.lower()
+        username = ''.join(c for c in username if c.isalnum() or c == '-')
+
+        # 闄愬埗闀垮害 (GitHub鏈€澶х敤鎴峰悕闀垮害涓?9)
+        if len(username) > 39:
+            username = username[:39]
+
+        # 纭繚鏈€灏忛暱搴?(GitHub鏈€灏忕敤鎴峰悕闀垮害涓?)
+        if len(username) < 1:
+            username = "user" + ''.join(random.choices(string.digits, k=6))
+
+        # 淇濆瓨鐢ㄦ埛鍚嶅埌鐘舵€?        state_manager.set_data('current_username', username)
+
+        logger.info(f"鐢ㄦ埛鍚嶇敓鎴愭垚鍔? {username} (绛栫暐: email_prefix)")
+
+        return TaskResult(
+            success=True,
+            data={'username': username, 'generation_method': 'email_prefix'}
+        )
+
+    except Exception as e:
+        logger.error(f"閭鍓嶇紑鐢ㄦ埛鍚嶇敓鎴愬け璐ワ紝浣跨敤澶囩敤鏂规硶: {e}")
+
+        # 澶囩敤鏂规硶锛氫娇鐢ㄥ師鏉ョ殑绠€鍗曠敓鎴?        try:
+            random_suffix = ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
+            username = f"user{random_suffix}"
+
+            state_manager.set_data('current_username', username)
+            logger.info(f"澶囩敤鐢ㄦ埛鍚嶇敓鎴愭垚鍔? {username}")
+
+            return TaskResult(
+                success=True,
+                data={'username': username, 'generation_method': 'fallback'}
+            )
+        except Exception as fallback_error:
+            logger.error(f"澶囩敤鐢ㄦ埛鍚嶇敓鎴愪篃澶辫触: {fallback_error}")
+            return TaskResult(
+                success=False,
+                error=str(fallback_error),
+                should_retry=False
+            )
+
+async def username_input_task(state_manager, event_bus):
+    """浠诲姟7: 濉啓鐢ㄦ埛鍚?""
+    logger.info("鎵ц浠诲姟: username_input_task")
+    
+    try:
+        browser = state_manager.get_data('browser_instance')
+        username = state_manager.get_data('current_username')
+        
+        if not browser:
+            raise Exception("娴忚鍣ㄥ疄渚嬫湭鎵惧埌")
+        if not username:
+            raise Exception("鐢ㄦ埛鍚嶆湭鐢熸垚")
+        
+        # 绛夊緟鐢ㄦ埛鍚嶈緭鍏ユ鍑虹幇
+        wait = WebDriverWait(browser.driver, 10)
+        username_input = wait.until(EC.presence_of_element_located((By.ID, "login")))
+        
+        # 娓呯┖骞跺～鍐欑敤鎴峰悕
+        username_input.clear()
+        username_input.send_keys(username)
+        
+        logger.info(f"鐢ㄦ埛鍚嶅～鍐欐垚鍔? {username}")
+        
+        return TaskResult(
+            success=True,
+            data={'username_filled': True}
+        )
+        
+    except TimeoutException:
+        logger.error("鐢ㄦ埛鍚嶈緭鍏ユ鏈壘鍒?)
+        return TaskResult(
+            success=False,
+            error="鐢ㄦ埛鍚嶈緭鍏ユ鏈壘鍒?,
+            should_retry=True
+        )
+    except Exception as e:
+        logger.error(f"鐢ㄦ埛鍚嶅～鍐欏け璐? {e}")
+        return TaskResult(
+            success=False,
+            error=str(e),
+            should_retry=True
+        )
+
+async def username_validate_task(state_manager, event_bus):
+    """浠诲姟8: 楠岃瘉鐢ㄦ埛鍚嶅彲鐢ㄦ€?""
+    logger.info("鎵ц浠诲姟: username_validate_task")
+    
+    try:
+        browser = state_manager.get_data('browser_instance')
+        if not browser:
+            raise Exception("娴忚鍣ㄥ疄渚嬫湭鎵惧埌")
+        
+        # 绛夊緟楠岃瘉缁撴灉
+        await asyncio.sleep(2)
+        
+        # 妫€鏌ユ槸鍚︽湁閿欒鎻愮ず
+        try:
+            error_element = browser.driver.find_element(By.CSS_SELECTOR, "#login-err")
+            if error_element.is_displayed():
+                error_text = error_element.text
+                logger.warning(f"鐢ㄦ埛鍚嶉獙璇佸け璐? {error_text}")
+                
+                # 濡傛灉鐢ㄦ埛鍚嶄笉鍙敤锛岀敓鎴愭柊鐨勭敤鎴峰悕
+                return TaskResult(
+                    success=False,
+                    error=f"鐢ㄦ埛鍚嶄笉鍙敤: {error_text}",
+                    should_retry=False  # 涓嶉噸璇曪紝鑰屾槸鐢熸垚鏂扮敤鎴峰悕
+                )
+        except:
+            # 娌℃湁鎵惧埌閿欒鍏冪礌锛岃鏄庨獙璇侀€氳繃
+            pass
+        
+        logger.info("鐢ㄦ埛鍚嶉獙璇侀€氳繃")
+        
+        return TaskResult(
+            success=True,
+            data={'username_validated': True}
+        )
+        
+    except Exception as e:
+        logger.error(f"鐢ㄦ埛鍚嶉獙璇佸け璐? {e}")
+        return TaskResult(
+            success=False,
+            error=str(e),
+            should_retry=True
+        )
+
+async def country_select_task(state_manager, event_bus):
+    """浠诲姟9: 閫夋嫨鍥藉/鍦板尯"""
+    logger.info("鎵ц浠诲姟: country_select_task")
+
+    try:
+        browser = state_manager.get_data('browser_instance')
+        if not browser:
+            raise Exception("娴忚鍣ㄥ疄渚嬫湭鎵惧埌")
+
+        wait = WebDriverWait(browser.driver, 10)
+
+        # 绗竴姝ワ細鏌ユ壘骞剁偣鍑诲浗瀹堕€夋嫨鎸夐挳鏉ユ縺娲讳笅鎷夋
+        # 灏濊瘯澶氱鍙兘鐨勬寜閽€夋嫨鍣?        button_selectors = [
+            "button[id*='select-panel'][id*='button']",  # 閫氱敤妯″紡
+            "button[data-view-component='true'][role='combobox']",  # GitHub鐗瑰畾妯″紡
+            "button.ActionListContent",  # 鍙兘鐨勭被鍚?            "div[data-testid='country-select'] button",  # 瀹瑰櫒涓殑鎸夐挳
+            "[id*='select-panel'] button"  # 鍖呭惈select-panel鐨勫厓绱犱腑鐨勬寜閽?        ]
+
+        country_button = None
+        for selector in button_selectors:
+            try:
+                country_button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, selector)))
+                logger.info(f"鎵惧埌鍥藉閫夋嫨鎸夐挳锛屼娇鐢ㄩ€夋嫨鍣? {selector}")
+                break
+            except TimeoutException:
+                continue
+
+        if not country_button:
+            raise Exception("鏈壘鍒板浗瀹堕€夋嫨鎸夐挳")
+
+        # 鐐瑰嚮鎸夐挳婵€娲讳笅鎷夋
+        try:
+            country_button.click()
+            logger.info("宸茬偣鍑诲浗瀹堕€夋嫨鎸夐挳锛屾縺娲讳笅鎷夋")
+        except Exception as click_error:
+            logger.warning(f"鐐瑰嚮鍥藉閫夋嫨鎸夐挳澶辫触: {click_error}")
+
+            # 妫€鏌ユ槸鍚︽湁cookie鍚屾剰妯箙闃绘尅
+            try:
+                # 鏌ユ壘Accept鎸夐挳
+                accept_selectors = [
+                    "button._1XuCi2WhiqeWRUVp3pnFG3.erL690_8JwUW-R4bJRcfl",  # 鍏蜂綋鐨勭被鍚?                    "button:contains('Accept')",  # 鍖呭惈Accept鏂囨湰鐨勬寜閽?                    "[id*='wcpConsentBanner'] button",  # cookie妯箙涓殑鎸夐挳
+                    "div[role='alert'] button",  # alert瑙掕壊鐨刣iv涓殑鎸夐挳
+                    "button[type='button']:contains('Accept')"  # 绫诲瀷涓篵utton涓斿寘鍚獳ccept鐨勬寜閽?                ]
+
+                accept_button = None
+                for selector in accept_selectors:
+                    try:
+                        if ":contains(" in selector:
+                            # 瀵逛簬鍖呭惈鏂囨湰鐨勯€夋嫨鍣紝浣跨敤XPath
+                            xpath_selector = f"//button[contains(text(), 'Accept')]"
+                            accept_button = browser.driver.find_element(By.XPATH, xpath_selector)
+                        else:
+                            accept_button = browser.driver.find_element(By.CSS_SELECTOR, selector)
+
+                        if accept_button and accept_button.is_displayed():
+                            logger.info(f"鎵惧埌Accept鎸夐挳锛屼娇鐢ㄩ€夋嫨鍣? {selector}")
+                            break
+                    except:
+                        continue
+
+                if accept_button:
+                    accept_button.click()
+                    logger.info("宸茬偣鍑籄ccept鎸夐挳锛屽叧闂璫ookie鍚屾剰妯箙")
+                    await asyncio.sleep(1)
+
+                    # 閲嶆柊灏濊瘯鐐瑰嚮鍥藉閫夋嫨鎸夐挳
+                    country_button.click()
+                    logger.info("閲嶆柊鐐瑰嚮鍥藉閫夋嫨鎸夐挳鎴愬姛")
+                else:
+                    raise click_error  # 濡傛灉娌℃壘鍒癆ccept鎸夐挳锛屾姏鍑哄師濮嬮敊璇?
+            except Exception as accept_error:
+                logger.error(f"澶勭悊cookie妯箙澶辫触: {accept_error}")
+                raise click_error  # 鎶涘嚭鍘熷鐨勭偣鍑婚敊璇?
+        # 绛夊緟涓嬫媺妗嗗嚭鐜?        await asyncio.sleep(1)
+
+        # 绗簩姝ワ細鏌ユ壘骞剁偣鍑荤編鍥介€夐」
+        # 鏌ユ壘缇庡浗閫夐」 (data-item-id="US")
+        us_option_selectors = [
+            "li[data-item-id='US'] button",  # 涓昏閫夋嫨鍣?            "button[data-value='US']",  # 澶囩敤閫夋嫨鍣?            "li[data-item-id='US']",  # 濡傛灉button涓嶅彲鐐瑰嚮锛屽皾璇昹i
+            "[data-item-id='US']"  # 鏈€閫氱敤鐨勯€夋嫨鍣?        ]
+
+        us_option = None
+        for selector in us_option_selectors:
+            try:
+                us_option = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, selector)))
+                logger.info(f"鎵惧埌缇庡浗閫夐」锛屼娇鐢ㄩ€夋嫨鍣? {selector}")
+                break
+            except TimeoutException:
+                continue
+
+        if not us_option:
+            raise Exception("鏈壘鍒扮編鍥介€夐」")
+
+        # 鐐瑰嚮缇庡浗閫夐」
+        us_option.click()
+        logger.info("宸查€夋嫨缇庡浗")
+
+        # 绛夊緟閫夋嫨瀹屾垚
+        await asyncio.sleep(0.5)
+
+        logger.info("鍥藉閫夋嫨瀹屾垚")
+
+        return TaskResult(
+            success=True,
+            data={'country_selected': True, 'selected_country': 'US'}
+        )
+
+    except Exception as e:
+        logger.error(f"鍥藉閫夋嫨澶辫触: {e}")
+        return TaskResult(
+            success=False,
+            error=str(e),
+            should_retry=True
+        )
+
+async def form_submit_task(state_manager, event_bus):
+    """浠诲姟9: 鎻愪氦琛ㄥ崟"""
+    logger.info("鎵ц浠诲姟: form_submit_task")
+    
+    try:
+        browser = state_manager.get_data('browser_instance')
+        if not browser:
+            raise Exception("娴忚鍣ㄥ疄渚嬫湭鎵惧埌")
+        
+        # 鏌ユ壘骞剁偣鍑绘彁浜ゆ寜閽?- 浣跨敤澶氱閫夋嫨鍣?        wait = WebDriverWait(browser.driver, 10)
+
+        # 灏濊瘯澶氱鍙兘鐨勬彁浜ゆ寜閽€夋嫨鍣?- 鎸夌簿纭害鎺掑簭
+        submit_selectors = [
+            # 鏈€绮剧‘鐨勯€夋嫨鍣?- 鍩轰簬鏈€鏂扮殑鎸夐挳HTML缁撴瀯
+            "button[aria-describedby='terms-of-service'][type='button'].js-octocaptcha-load-captcha.signup-form-fields__button",
+            "button[aria-describedby='terms-of-service'][type='button'].js-octocaptcha-load-captcha",
+            "button.js-octocaptcha-load-captcha.signup-form-fields__button.Button--primary",
+            "button.js-octocaptcha-load-captcha.signup-form-fields__button",
+
+            # 鍩轰簬 aria-describedby 鐨勯€夋嫨鍣?            "button[aria-describedby='terms-of-service'][type='button']",
+            "button[aria-describedby='terms-of-service']",
+
+            # 鍩轰簬 class 鐨勯€夋嫨鍣?            "button.js-octocaptcha-load-captcha",
+            "button.signup-form-fields__button",
+            "button.Button--primary.Button--fullWidth",
+            "button.Button--primary.Button--medium",
+
+            # 鍩轰簬鏂囨湰鍐呭鐨勯€夋嫨鍣?            "//button[contains(text(), 'Create account')]",
+            "//button[.//span[contains(text(), 'Create account')]]",
+
+            # 閫氱敤閫夋嫨鍣?            "button[type='submit']",  # 閫氱敤鎻愪氦鎸夐挳
+            "button.btn-primary",  # Bootstrap鏍峰紡鎸夐挳
+            "form button:last-child",  # 琛ㄥ崟涓殑鏈€鍚庝竴涓寜閽?            "[data-testid='signup-button']",  # 娴嬭瘯ID
+            ".signup-form button",  # 娉ㄥ唽琛ㄥ崟涓殑鎸夐挳
+            "button.js-signup-form-submit",  # 鍙兘鐨勭被鍚?        ]
+
+        submit_button = None
+        for selector in submit_selectors:
+            try:
+                # 鍒ゆ柇鏄惁涓篨Path閫夋嫨鍣?                if selector.startswith("//"):
+                    submit_button = wait.until(EC.element_to_be_clickable((By.XPATH, selector)))
+                else:
+                    submit_button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, selector)))
+                logger.info(f"鎵惧埌鎻愪氦鎸夐挳锛屼娇鐢ㄩ€夋嫨鍣? {selector}")
+                break
+            except TimeoutException:
+                continue
+
+        # 濡傛灉鎵€鏈夐€夋嫨鍣ㄩ兘澶辫触锛屽皾璇曟洿澶氭枃鏈煡鎵?        if not submit_button:
+            text_options = ['Create account', 'Sign up', 'Continue', 'Submit', 'Register']
+            for text in text_options:
+                try:
+                    submit_button = wait.until(EC.element_to_be_clickable((By.XPATH, f"//button[contains(text(), '{text}')]")))
+                    logger.info(f"鎵惧埌鎻愪氦鎸夐挳锛屼娇鐢ㄦ枃鏈? {text}")
+                    break
+                except TimeoutException:
+                    continue
+
+        if not submit_button:
+            raise Exception("鏈壘鍒版彁浜ゆ寜閽?)
+
+        submit_button.click()
+
+        logger.info("琛ㄥ崟鎻愪氦鎴愬姛")
+        
+        # 鍙戝竷琛ㄥ崟鎻愪氦浜嬩欢
+        await event_bus.publish(create_event(
+            name='form_submitted',
+            data={
+                'email': state_manager.get_data('email'),
+                'username': state_manager.get_data('current_username')
+            },
+            source='form_submit_task'
+        ))
+        
+        return TaskResult(
+            success=True,
+            data={'form_submitted': True}
+        )
+        
+    except TimeoutException:
+        logger.error("鎻愪氦鎸夐挳鏈壘鍒?)
+        return TaskResult(
+            success=False,
+            error="鎻愪氦鎸夐挳鏈壘鍒?,
+            should_retry=True
+        )
+    except Exception as e:
+        logger.error(f"琛ㄥ崟鎻愪氦澶辫触: {e}")
+        return TaskResult(
+            success=False,
+            error=str(e),
+            should_retry=True
+        )

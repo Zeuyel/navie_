@@ -1,6 +1,0 @@
-selenium==4.15.2
-requests==2.31.0
-Pillow==10.1.0
-python-dotenv==1.0.0
-beautifulsoup4==4.12.2
-pyotp==2.9.0

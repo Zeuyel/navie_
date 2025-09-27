@@ -1,0 +1,99 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "navie"
+version = "1.0.0"
+description = "GitHub自动注册系统"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "MIT"}
+authors = [
+    {name = "Navie Team", email = "team@navie.com"},
+]
+keywords = ["github", "automation", "signup", "email"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+dependencies = [
+    "selenium>=4.15.2",
+    "requests>=2.31.0",
+    "Pillow>=10.1.0",
+    "python-dotenv>=1.0.0",
+    "beautifulsoup4>=4.12.2",
+    "pyotp>=2.9.0",
+    "asyncpg>=0.29.0",
+    "psycopg2-binary>=2.9.9",
+    "flask>=3.0.0",
+    "jinja2>=3.1.2",
+    "aiohttp>=3.9.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.3",
+    "pytest-asyncio>=0.21.1",
+    "pytest-cov>=4.1.0",
+    "black>=23.11.0",
+    "flake8>=6.1.0",
+    "isort>=5.12.0",
+    "ipython>=8.17.2",
+]
+
+[project.scripts]
+navie-web = "navie.web.email_web_manager:main"
+navie-cli = "navie.cli.main:main"
+
+[project.urls]
+Homepage = "https://github.com/navie/navie"
+Repository = "https://github.com/navie/navie.git"
+Issues = "https://github.com/navie/navie/issues"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.black]
+line-length = 88
+target-version = ['py38']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+line_length = 88
+known_first_party = ["navie"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
+asyncio_mode = "auto"

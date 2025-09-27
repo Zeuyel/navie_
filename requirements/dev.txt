@@ -1,0 +1,16 @@
+# 开发环境依赖
+-r base.txt
+
+# 测试相关
+pytest==7.4.3
+pytest-asyncio==0.21.1
+pytest-cov==4.1.0
+
+# 代码质量
+black==23.11.0
+flake8==6.1.0
+isort==5.12.0
+
+# 调试工具
+ipython==8.17.2
+pdb++==0.10.3

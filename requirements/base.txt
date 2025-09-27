@@ -1,0 +1,19 @@
+# 基础运行时依赖
+selenium==4.15.2
+requests==2.31.0
+Pillow==10.1.0
+python-dotenv==1.0.0
+beautifulsoup4==4.12.2
+pyotp==2.9.0
+
+# 数据库相关
+asyncpg==0.29.0
+psycopg2-binary==2.9.9
+
+# Web界面相关
+flask==3.0.0
+jinja2==3.1.2
+
+# 异步支持
+aiohttp==3.9.1
+asyncio-mqtt==0.16.1
